@@ -1,5 +1,4 @@
 (async () => {
-  // 📁 Пути (без изменений)
   const REPO_PATH = 'https://goga0000.github.io/secantion/one/';
   const API_URL = 'https://api.github.com/repos/Goga0000/secantion/contents/one?ref=main';
   
@@ -8,7 +7,7 @@
   let framesReady = false;
   let webpFiles = [];
   
-  // 🚀 GitHub API + preload (без изменений)
+  // GitHub API + preload (БЕЗ ИЗМЕНЕНИЙ)
   const getFileListFromAPI = async () => {
     try {
       const response = await fetch(API_URL);
@@ -41,6 +40,7 @@
           img.onerror = e;
         });
         frameCache.set(index, img);
+        console.log(`✅ КЭШ ${index}: ${fileName} (${img.naturalWidth}x${img.naturalHeight})`);
       } catch(e) {
         console.warn(`⚠️ ${fileName}`);
       }
@@ -48,36 +48,37 @@
     
     await Promise.allSettled(promises);
     framesReady = true;
-    console.log(`🎉 ${totalFrames} файлов в памяти!`);
+    console.log(`🎉 ${totalFrames} файлов в памяти! frameCache.size=${frameCache.size}`);
   };
   
   preloadAllFrames();
   
-  // ✅ СТИЛИ: АДАПТИВНАЯ высота Tilda
+  // ✅ СТИЛИ (упрощенные)
   const style = document.createElement('style');
   style.textContent = `
     .video360-container {
       position: relative !important;
       width: 100% !important;
-      height: calc(558px * var(--zoom, 1)) !important; /* ✅ Tilda стиль */
-      background: #f0f0f0;
+      height: calc(558px * var(--zoom, 1)) !important;
+      background: #f0f0f0 !important;
       overflow: hidden;
-      cursor: grab;
-      transform: translateZ(0);
     }
-    .video360-container * { user-select: none !important; }
-    .video360-container.dragging .video-protect-overlay { cursor: grabbing !important; }
     #vid360-canvas {
       position: absolute !important;
       top: 0 !important;
       left: 0 !important;
       width: 100% !important;
       height: 100% !important;
-      object-fit: cover;
       display: block !important;
-      pointer-events: none !important;
-      background: white;
-      will-change: contents;
+    }
+    .video-protect-overlay {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      cursor: grab !important;
+      z-index: 10 !important;
     }
   `;
   document.head.appendChild(style);
@@ -101,7 +102,7 @@
     console.log('⚡ Video360: заменяем слайд!');
     prevLastSlide.classList.add('video-replaced');
     
-    // ✅ HTML: АДАПТИВНЫЙ контейнер
+    // ✅ HTML
     targetWrapper.innerHTML = `
       <div class="video360-container">
         <div class="video-protect-overlay"></div>
@@ -113,46 +114,33 @@
     const ctx = canvas.getContext('2d');
     const container = targetWrapper.querySelector('.video360-container');
     const protectOverlay = container.querySelector('.video-protect-overlay');
-    const sliderWrapper = document.querySelector('.t-slds__items-wrapper');
     
-    // ✅ АДАПТИВНЫЙ setupCanvas (читает --zoom)
+    // ✅ DEBUG setupCanvas
     const setupCanvas = () => {
-      // ✅ Ждем рендер CSS calc()
       requestAnimationFrame(() => {
         const rect = container.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
-        const computedStyle = getComputedStyle(container);
         
-        // ✅ Точный размер с Tilda zoom
-        const canvasWidth = Math.max(rect.width, 300);
-        const canvasHeight = Math.max(parseFloat(computedStyle.height) || rect.height, 300);
-        
-        canvas.width = canvasWidth * dpr;
-        canvas.height = canvasHeight * dpr;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
         canvas.style.width = '100%';
         canvas.style.height = '100%';
         
         ctx.scale(dpr, dpr);
-        ctx.imageSmoothingEnabled = true;
-        
-        console.log(`📐 Canvas: ${canvasWidth.toFixed(0)}x${canvasHeight.toFixed(0)} zoom:${getComputedStyle(document.documentElement).getPropertyValue('--zoom')}`);
+        console.log(`📐 Canvas setup: ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}`);
       });
     };
     
     setupCanvas();
-    window.addEventListener('resize', setupCanvas);
     
-    // 🎮 ПЛАВНЫЙ DRAG (без изменений)
-    let isDragging = false;
-    let startX = 0;
-    let dragStartFrame = 0;
-    let dragAccumulatedDelta = 0;
-    let rafId = null;
-    const pixelsPerFrame = 4;
-    
-    const displayFrame = (frameIndex) => {
+    // ✅ DEBUG displayFrame
+    const displayFrame = (frameIndex = 0) => {
+      console.log(`🎨 displayFrame(${frameIndex}) totalFrames=${totalFrames} cache=${frameCache.size}`);
+      
       const normalized = Math.floor(((frameIndex % totalFrames) + totalFrames) % totalFrames);
       const frameImg = frameCache.get(normalized);
+      
+      console.log(`🎨 Frame ${normalized}:`, frameImg ? `${frameImg.naturalWidth}x${frameImg.naturalHeight}` : 'NULL');
       
       const rect = container.getBoundingClientRect();
       const canvasWidth = rect.width;
@@ -160,89 +148,64 @@
       
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       
-      if (frameImg && frameImg.complete) {
+      if (frameImg && frameImg.complete && frameImg.naturalWidth > 0) {
         ctx.drawImage(frameImg, 0, 0, canvasWidth, canvasHeight);
+        console.log(`✅ НАРИСОВАЛИ кадр ${normalized}`);
       } else {
-        ctx.fillStyle = '#f0f0f0';
+        ctx.fillStyle = 'red';
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        console.log(`❌ НЕ НАРИСОВАЛИ: img=${!!frameImg} complete=${frameImg?.complete} size=${frameImg?.naturalWidth}`);
       }
     };
     
-    const updateFrame = () => {
-      displayFrame(dragStartFrame + dragAccumulatedDelta);
-      if (isDragging) rafId = requestAnimationFrame(updateFrame);
-    };
+    // ✅ ПЕРВЫЙ КАДР СРАЗУ (DEBUG)
+    setTimeout(() => {
+      setupCanvas();
+      displayFrame(0);
+    }, 200);
     
-    const handleMouseDown = (e) => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      
-      if (rafId) cancelAnimationFrame(rafId);
-      
+    // 🎮 Drag (упрощенный DEBUG)
+    let isDragging = false;
+    let currentFrame = 0;
+    
+    protectOverlay.addEventListener('mousedown', (e) => {
+      console.log('🖱️ MOUSE DOWN');
       isDragging = true;
-      startX = e.clientX || (e.touches?.[0]?.clientX || 0);
-      dragAccumulatedDelta = 0;
-      dragStartFrame = 0;
-      
-      sliderWrapper.style.pointerEvents = 'none';
-      container.classList.add('dragging');
-      
-      rafId = requestAnimationFrame(updateFrame);
-    };
-    
-    const handleMouseMove = (e) => {
-      if (!isDragging) return;
       e.preventDefault();
-      
-      const currentX = e.clientX || (e.touches?.[0]?.clientX || 0);
-      const deltaX = currentX - startX;
-      dragAccumulatedDelta = deltaX / pixelsPerFrame;
-      
-      if (!rafId) rafId = requestAnimationFrame(updateFrame);
-    };
-    
-    const handleMouseUp = () => {
-      if (isDragging) {
-        isDragging = false;
-        container.classList.remove('dragging');
-        setTimeout(() => sliderWrapper.style.pointerEvents = '', 300);
-        
-        if (rafId) {
-          cancelAnimationFrame(rafId);
-          rafId = null;
-        }
-        
-        dragStartFrame += dragAccumulatedDelta;
-        dragAccumulatedDelta = 0;
-        displayFrame(dragStartFrame);
-      }
-    };
-    
-    // ✅ Events
-    protectOverlay.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    });
     
     protectOverlay.addEventListener('touchstart', (e) => {
-      handleMouseDown({ clientX: e.touches[0].clientX });
+      console.log('👆 TOUCH DOWN');
+      isDragging = true;
       e.preventDefault();
     }, { passive: false });
     
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        currentFrame = (e.clientX % totalFrames + totalFrames) % totalFrames;
+        displayFrame(currentFrame);
+      }
+    });
+    
     document.addEventListener('touchmove', (e) => {
       if (isDragging) {
-        handleMouseMove({ clientX: e.touches[0].clientX });
+        const touch = e.touches[0];
+        currentFrame = (touch.clientX % totalFrames + totalFrames) % totalFrames;
+        displayFrame(currentFrame);
         e.preventDefault();
       }
     }, { passive: false });
     
-    document.addEventListener('touchend', handleMouseUp);
+    document.addEventListener('mouseup', () => {
+      console.log('🖱️ MOUSE UP');
+      isDragging = false;
+    });
     
-    // ✅ ПЕРВЫЙ КАДР
-    setTimeout(() => {
-      setupCanvas();
-      displayFrame(0);
-    }, 100);
+    document.addEventListener('touchend', () => {
+      console.log('👆 TOUCH UP');
+      isDragging = false;
+    });
     
-    console.log('🚀 Video360: ✅ Tilda zoom height готов!');
+    console.log('🚀 Video360 DEBUG готов! Проверьте Console');
   }, 500);
 })();
