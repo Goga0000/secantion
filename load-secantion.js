@@ -1,15 +1,14 @@
 (async () => {
-  // 📁 Пути
+  // 📁 Пути (без изменений)
   const REPO_PATH = 'https://goga0000.github.io/secantion/one/';
   const API_URL = 'https://api.github.com/repos/Goga0000/secantion/contents/one?ref=main';
   
-  // 🧠 Кэш
   const frameCache = new Map();
   let totalFrames = 0;
   let framesReady = false;
   let webpFiles = [];
   
-  // 🚀 GitHub API
+  // 🚀 GitHub API + preload (без изменений)
   const getFileListFromAPI = async () => {
     try {
       const response = await fetch(API_URL);
@@ -25,7 +24,6 @@
     }
   };
   
-  // 🚀 Предзагрузка
   const preloadAllFrames = async () => {
     if (framesReady) return;
     if (!await getFileListFromAPI()) return;
@@ -55,13 +53,13 @@
   
   preloadAllFrames();
   
-  // ✅ СТИЛИ: Fullscreen + фиксированная высота
+  // ✅ СТИЛИ: АДАПТИВНАЯ высота Tilda
   const style = document.createElement('style');
   style.textContent = `
     .video360-container {
       position: relative !important;
       width: 100% !important;
-      height: 400px !important; /* ✅ ФИКС высоты */
+      height: calc(558px * var(--zoom, 1)) !important; /* ✅ Tilda стиль */
       background: #f0f0f0;
       overflow: hidden;
       cursor: grab;
@@ -103,7 +101,7 @@
     console.log('⚡ Video360: заменяем слайд!');
     prevLastSlide.classList.add('video-replaced');
     
-    // ✅ HTML: ФИКСИРОВАННАЯ высота 400px
+    // ✅ HTML: АДАПТИВНЫЙ контейнер
     targetWrapper.innerHTML = `
       <div class="video360-container">
         <div class="video-protect-overlay"></div>
@@ -117,30 +115,34 @@
     const protectOverlay = container.querySelector('.video-protect-overlay');
     const sliderWrapper = document.querySelector('.t-slds__items-wrapper');
     
-    // ✅ SETUP CANVAS: ФИКС height=0
+    // ✅ АДАПТИВНЫЙ setupCanvas (читает --zoom)
     const setupCanvas = () => {
-      const rect = container.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      
-      // ✅ ТОЧНЫЙ размер с минимальными ограничениями
-      const canvasWidth = Math.max(rect.width, 300);
-      const canvasHeight = Math.max(rect.height, 400); // ✅ Минимум 400px!
-      
-      canvas.width = canvasWidth * dpr;
-      canvas.height = canvasHeight * dpr;
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-      
-      ctx.scale(dpr, dpr);
-      ctx.imageSmoothingEnabled = true;
-      
-      console.log(`📐 Canvas: ${canvasWidth.toFixed(0)}x${canvasHeight.toFixed(0)} DPR:${dpr}`);
+      // ✅ Ждем рендер CSS calc()
+      requestAnimationFrame(() => {
+        const rect = container.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const computedStyle = getComputedStyle(container);
+        
+        // ✅ Точный размер с Tilda zoom
+        const canvasWidth = Math.max(rect.width, 300);
+        const canvasHeight = Math.max(parseFloat(computedStyle.height) || rect.height, 300);
+        
+        canvas.width = canvasWidth * dpr;
+        canvas.height = canvasHeight * dpr;
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        
+        ctx.scale(dpr, dpr);
+        ctx.imageSmoothingEnabled = true;
+        
+        console.log(`📐 Canvas: ${canvasWidth.toFixed(0)}x${canvasHeight.toFixed(0)} zoom:${getComputedStyle(document.documentElement).getPropertyValue('--zoom')}`);
+      });
     };
     
     setupCanvas();
     window.addEventListener('resize', setupCanvas);
     
-    // 🎮 ПЛАВНЫЙ DRAG (накопительный)
+    // 🎮 ПЛАВНЫЙ DRAG (без изменений)
     let isDragging = false;
     let startX = 0;
     let dragStartFrame = 0;
@@ -159,7 +161,7 @@
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       
       if (frameImg && frameImg.complete) {
-        ctx.drawImage(frameImg, 0, 0, canvasWidth, canvasHeight); // ✅ Fullscreen растягивание
+        ctx.drawImage(frameImg, 0, 0, canvasWidth, canvasHeight);
       } else {
         ctx.fillStyle = '#f0f0f0';
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -194,7 +196,7 @@
       
       const currentX = e.clientX || (e.touches?.[0]?.clientX || 0);
       const deltaX = currentX - startX;
-      dragAccumulatedDelta = deltaX / pixelsPerFrame; // ✅ НАКОПИТЕЛЬНО
+      dragAccumulatedDelta = deltaX / pixelsPerFrame;
       
       if (!rafId) rafId = requestAnimationFrame(updateFrame);
     };
@@ -210,7 +212,6 @@
           rafId = null;
         }
         
-        // ✅ ФИНАЛЬНАЯ позиция сохраняется
         dragStartFrame += dragAccumulatedDelta;
         dragAccumulatedDelta = 0;
         displayFrame(dragStartFrame);
@@ -237,7 +238,11 @@
     document.addEventListener('touchend', handleMouseUp);
     
     // ✅ ПЕРВЫЙ КАДР
-    displayFrame(0);
-    console.log('🚀 Video360: ✅ height fixed + плавный drag готов!');
+    setTimeout(() => {
+      setupCanvas();
+      displayFrame(0);
+    }, 100);
+    
+    console.log('🚀 Video360: ✅ Tilda zoom height готов!');
   }, 500);
 })();
