@@ -1,76 +1,222 @@
 (async () => {
-  const FRAMES_PATH = 'https://goga0000.github.io/secantion/one/';
-  const FPS = 30;
+  // 📁 Пути
+  const REPO_PATH = 'https://goga0000.github.io/secantion/one/';
+  const API_URL = 'https://api.github.com/repos/Goga0000/secantion/contents/one?ref=main';
   
+  // 🧠 Глобальный кэш кадров
   const frameCache = new Map();
   let totalFrames = 0;
   let framesReady = false;
-  let webpFiles = []; // ← НОВОЕ!
+  let webpFiles = [];
   
-  // 🚀 1. СКАНИРОВАНИЕ ВСЕХ ФАЙЛОВ в папке
-  const getFileList = async () => {
+  // 🚀 1. GitHub API: получить ВСЕ файлы в папке (как есть)
+  const getFileListFromAPI = async () => {
     try {
-      const response = await fetch(FRAMES_PATH);
-      const html = await response.text();
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error(`API: ${response.status}`);
       
-      // Парсим .webp файлы из GitHub directory listing
-      const fileMatches = [...html.matchAll(/href="([^"]*\.webp[^"]*)"/g)];
-      webpFiles = fileMatches
-        .map(match => decodeURIComponent(match[1]))
-        .filter(name => !name.includes('..') && name.endsWith('.webp'))
-        .sort(); // Последовательная анимация
-        
+      const files = await response.json();
+      webpFiles = files.map(file => file.name); // Без фильтра/сортировки
+      
       totalFrames = webpFiles.length;
-      console.log(`📁 Найдено ${totalFrames} WebP файлов:`, webpFiles.slice(0, 3));
+      console.log(`📁 GitHub API: ${totalFrames} файлов:`, webpFiles.slice(0, 5));
       return true;
     } catch(e) {
-      console.error('❌ Ошибка сканирования:', e);
+      console.error('❌ GitHub API:', e.message);
       return false;
     }
   };
   
-  // 🚀 2. Предзагрузка ВСЕХ найденных файлов
+  // 🚀 2. Предзагрузка ВСЕХ файлов параллельно
   const preloadAllFrames = async () => {
     if (framesReady) return;
     
-    console.log('🔄 Загружаем кадры с GitHub...');
+    console.log('🔄 Загружаем кадры с GitHub Pages...');
     
-    if (!await getFileList()) return;
+    if (!await getFileListFromAPI()) {
+      console.error('❌ Не удалось получить список файлов');
+      return;
+    }
     
-    // Параллельная загрузка ВСЕХ файлов
+    // Параллельная загрузка
     const promises = webpFiles.map(async (fileName, index) => {
-      const url = `${FRAMES_PATH}${fileName}`;
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const img = new Image();
-      img.src = URL.createObjectURL(blob);
-      await new Promise((r, e) => {
-        img.onload = r;
-        img.onerror = e;
-      });
-      frameCache.set(index, img);
+      try {
+        const response = await fetch(`${REPO_PATH}${fileName}`);
+        if (!response.ok) throw new Error(`${response.status}`);
+        
+        const blob = await response.blob();
+        const img = new Image();
+        img.src = URL.createObjectURL(blob);
+        
+        await new Promise((resolve, reject) => {
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.onabort = reject;
+        });
+        
+        frameCache.set(index, img);
+        console.log(`✅ ${index+1}/${totalFrames}: ${fileName}`);
+      } catch(e) {
+        console.warn(`⚠️ ${index+1}/${totalFrames}: ${fileName} (${e.message})`);
+      }
     });
     
     await Promise.allSettled(promises);
     framesReady = true;
-    console.log(`✅ ${totalFrames} файлов в памяти!`);
+    console.log(`🎉 ${totalFrames} файлов в памяти! Ready for Tilda!`);
   };
   
+  // Запускаем предзагрузку СРАЗУ
   preloadAllFrames();
   
-  // Остальной код БЕЗ ИЗМЕНЕНИЙ...
+  // Стили
   const style = document.createElement('style');
   style.textContent = `
     .video360-container * { user-select: none !important; }
     .video360-container { cursor: grab !important; transform: translateZ(0); }
     .video360-container.dragging .video-protect-overlay { cursor: grabbing !important; }
-    #vid360-canvas { background: white; will-change: contents; }
+    #vid360-canvas { background: white; will-change: contents; aspect-ratio: 1; }
   `;
   document.head.appendChild(style);
   
-  // 🔥 ОСНОВНОЙ ЦИКЛ TILDA (тот же)
+  // 🔥 ОСНОВНОЙ ЦИКЛ TILDA
   setInterval(() => {
-    if (!framesReady) return;
-    // ... весь остальной код без изменений
+    if (!framesReady) {
+      console.log('⏳ Ждем кадры...');
+      return;
+    }
+    
+    const wrapper = document.querySelector('.t-slds__items-wrapper');
+    if (!wrapper) return;
+    
+    const slides = wrapper.querySelectorAll('.t-slds__item');
+    if (slides.length < 2) return;
+    
+    const prevLastSlide = slides[slides.length - 2];
+    if (!prevLastSlide || prevLastSlide.classList.contains('video-replaced')) return;
+    
+    const targetWrapper = prevLastSlide.querySelector('.t-null__slds-wrapper');
+    if (!targetWrapper) return;
+    
+    console.log('⚡ Video360: кадры готовы, заменяем слайд!');
+    prevLastSlide.classList.add('video-replaced');
+    
+    // ✅ HTML Canvas
+    targetWrapper.innerHTML = `
+      <div class="video360-container" style="position:relative;width:100%;height:100%;background:white;overflow:hidden;">
+        <div class="video-protect-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:99;background:transparent;cursor:grab;pointer-events:all;touch-action:none;"></div>
+        <canvas id="vid360-canvas" style="width:100%;height:100%;aspect-ratio:1;display:block;pointer-events:none;background:white;"></canvas>
+      </div>
+    `;
+    
+    const canvas = document.getElementById('vid360-canvas');
+    const ctx = canvas.getContext('2d');
+    const container = targetWrapper.querySelector('.video360-container');
+    const protectOverlay = container.querySelector('.video-protect-overlay');
+    const sliderWrapper = document.querySelector('.t-slds__items-wrapper');
+    
+    const setupCanvas = () => {
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+    };
+    
+    setupCanvas();
+    window.addEventListener('resize', setupCanvas);
+    
+    // 🎮 Drag controls (мгновенные!)
+    let isDragging = false;
+    let startX = 0;
+    let currentFrame = 0;
+    let rafId = null;
+    const pixelsPerFrame = 8;
+    
+    const displayFrame = (frameIndex) => {
+      const normalized = Math.floor(((frameIndex % totalFrames) + totalFrames) % totalFrames);
+      const frameImg = frameCache.get(normalized);
+      
+      const dpr = window.devicePixelRatio || 1;
+      const canvasWidth = canvas.width / dpr;
+      const canvasHeight = canvas.height / dpr;
+      
+      ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+      
+      if (frameImg && frameImg.complete) {
+        ctx.drawImage(frameImg, 0, 0, canvasWidth, canvasHeight);
+      } else {
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      }
+    };
+    
+    const updateFrame = () => {
+      displayFrame(currentFrame);
+      if (isDragging) rafId = requestAnimationFrame(updateFrame);
+    };
+    
+    const handleMouseDown = (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      
+      if (rafId) cancelAnimationFrame(rafId);
+      
+      isDragging = true;
+      startX = e.clientX || (e.touches?.[0]?.clientX || 0);
+      
+      sliderWrapper.style.pointerEvents = 'none';
+      container.classList.add('dragging');
+      
+      rafId = requestAnimationFrame(updateFrame);
+    };
+    
+    const handleMouseMove = (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      
+      const currentX = e.clientX || (e.touches?.[0]?.clientX || startX);
+      currentFrame = (currentX - startX) / pixelsPerFrame;
+      
+      if (!rafId) rafId = requestAnimationFrame(updateFrame);
+    };
+    
+    const handleMouseUp = () => {
+      if (isDragging) {
+        isDragging = false;
+        container.classList.remove('dragging');
+        setTimeout(() => sliderWrapper.style.pointerEvents = '', 300);
+        
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        
+        displayFrame(currentFrame);
+      }
+    };
+    
+    // ✅ Events (TILDA-safe)
+    protectOverlay.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    protectOverlay.addEventListener('touchstart', (e) => {
+      handleMouseDown({ clientX: e.touches[0].clientX });
+      e.preventDefault();
+    }, { passive: false });
+    
+    document.addEventListener('touchmove', (e) => {
+      if (isDragging) {
+        handleMouseMove({ clientX: e.touches[0].clientX });
+        e.preventDefault();
+      }
+    }, { passive: false });
+    
+    document.addEventListener('touchend', handleMouseUp);
+    
+    // ПЕРВЫЙ КАДР МГНОВЕННО!
+    displayFrame(0);
+    console.log('🚀 Video360 из GitHub Pages готов!');
   }, 500);
 })();
