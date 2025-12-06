@@ -58,7 +58,7 @@
   style.textContent = `
     .video360-container {
       position: relative !important;
-      width: 100% !important;
+      width: width: calc(567px * var(--zoom, 1)) !important;
       height: calc(558px * var(--zoom, 1)) !important;
       background: #f0f0f0 !important;
       overflow: hidden;
