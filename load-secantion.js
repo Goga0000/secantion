@@ -1,5 +1,5 @@
 (async () => {
-  const FRAMES_PATH = 'https://raw.githubusercontent.com/Goga0000/secantion/main/one/';
+  const FRAMES_PATH = 'https://goga0000.github.io/secantion/one/';
   const FPS = 30;
   
   const frameCache = new Map();
