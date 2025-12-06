@@ -1,57 +1,73 @@
 (async () => {
-  // 📁 ПУТЬ К ПАПКЕ С КАДрами на GitHub (raw.githubusercontent.com)
-  const FRAMES_PATH = 'https://goga0000.github.io/soyuz-rep/';
+  // 📁 ПУТЬ К ПАПКЕ С КАДрами на GitHub
+  const FRAMES_PATH = 'https://raw.githubusercontent.com/Goga0000/secantion/main/one/';
   const FPS = 30;
   
-  // 🧠 Глобальный кэш кадров
+  // 🧠 Глобальный кэш кадров (по индексу)
   const frameCache = new Map();
   let totalFrames = 0;
   let framesReady = false;
+  let webpFiles = [];
   
-  // 🚀 Предзагрузка ВСЕХ кадров параллельно
+  // 🚀 1. Получаем СПИСОК всех файлов в папке
+  const getFileList = async () => {
+    try {
+      const response = await fetch(FRAMES_PATH);
+      const html = await response.text();
+      
+      // Парсим имена .webp файлов из GitHub directory listing
+      const fileMatches = [...html.matchAll(/href="([^"]+\.webp[^"]*)"/g)];
+      webpFiles = fileMatches
+        .map(match => match[1])
+        .filter(name => name.includes('.webp') && !name.includes('..'))
+        .sort(); // Сортируем для последовательности
+        
+      totalFrames = webpFiles.length;
+      console.log(`📁 Найдено ${totalFrames} WebP файлов:`, webpFiles.slice(0, 5));
+      return true;
+    } catch(e) {
+      console.error('❌ Ошибка получения списка:', e);
+      return false;
+    }
+  };
+  
+  // 🚀 2. Предзагрузка ВСЕХ кадров параллельно
   const preloadAllFrames = async () => {
-    if (framesReady) return;
+    if (framesReady || totalFrames === 0) return;
     
     console.log('🔄 Загружаем кадры с GitHub...');
     
-    // Сначала определяем общее количество (по номеру последнего файла)
-    let frameCount = 0;
-    while (true) {
-      try {
-        const response = await fetch(`${FRAMES_PATH}${frameCount.toString().padStart(4, '0')}.jpg`);
-        if (!response.ok) break;
-        frameCount++;
-      } catch(e) {
-        break;
-      }
+    if (!await getFileList()) {
+      console.error('❌ Не удалось получить список файлов');
+      return;
     }
-    
-    totalFrames = frameCount;
-    console.log(`✅ Найдено ${totalFrames} кадров`);
     
     // Параллельная загрузка всех кадров
-    const promises = [];
-    for (let i = 0; i < totalFrames; i++) {
-      promises.push(
-        fetch(`${FRAMES_PATH}${i.toString().padStart(4, '0')}.jpg`)
-          .then(res => res.blob())
-          .then(blob => {
-            const img = new Image();
-            img.src = URL.createObjectURL(blob);
-            frameCache.set(i, img);
-          })
-      );
-    }
+    const promises = webpFiles.map(async (fileName, index) => {
+      try {
+        const response = await fetch(`${FRAMES_PATH}${fileName}`);
+        const blob = await response.blob();
+        const img = new Image();
+        img.src = URL.createObjectURL(blob);
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        frameCache.set(index, img);
+      } catch(e) {
+        console.warn(`⚠️ Ошибка загрузки ${fileName}:`, e);
+      }
+    });
     
-    await Promise.all(promises);
+    await Promise.allSettled(promises);
     framesReady = true;
-    console.log('✅ ВСЕ КАДРЫ В ПАМЯТИ!');
+    console.log(`✅ ВСЕ ${totalFrames} КАДРОВ В ПАМЯТИ!`);
   };
   
   // Запускаем предзагрузку СРАЗУ
   preloadAllFrames();
   
-  // Стили
+  // Стили (без изменений)
   const style = document.createElement('style');
   style.textContent = `
     .video360-container * { user-select: none !important; }
@@ -61,7 +77,7 @@
   `;
   document.head.appendChild(style);
   
-  // 🔥 ОСНОВНОЙ ЦИКЛ TILDA
+  // 🔥 ОСНОВНОЙ ЦИКЛ TILDA (без изменений)
   setInterval(() => {
     if (!framesReady) return;
     
@@ -84,7 +100,7 @@
     targetWrapper.innerHTML = `
       <div class="video360-container" style="position:relative;width:100%;height:100%;background:white;overflow:hidden;">
         <div class="video-protect-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:99;background:transparent;cursor:grab;pointer-events:all;touch-action:none;"></div>
-        <canvas id="vid360-canvas" style="width:100%;height:100%;aspect-ratio:1;display:block;pointer-events:none;background:white;"></canvas>
+        nvas id="vid360-canvas" stylee="width:100%;height:100%;aspect-ratio:1;display:block;pointer-events:none;background:white;"></canvas>
       </div>
     `;
     
@@ -105,7 +121,7 @@
     setupCanvas();
     window.addEventListener('resize', setupCanvas);
     
-    // 🎮 Drag controls (МГНОВЕННЫЕ)
+    // 🎮 Drag controls
     let isDragging = false;
     let startX = 0;
     let currentFrame = 0;
