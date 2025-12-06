@@ -1,6 +1,6 @@
 (async () => {
   // 📁 ПУТЬ К ПАПКЕ С КАДрами на GitHub (raw.githubusercontent.com)
-  const FRAMES_PATH = 'https://goga0000.github.io/soyuz-rep/';
+  const FRAMES_PATH = 'https://raw.githubusercontent.com/Goga0000/secantion/main/one';
   const FPS = 30;
   
   // 🧠 Глобальный кэш кадров
