@@ -1,14 +1,15 @@
 (async () => {
-  // 📁 Пути (без изменений)
+  // 📁 Пути
   const REPO_PATH = 'https://goga0000.github.io/secantion/one/';
   const API_URL = 'https://api.github.com/repos/Goga0000/secantion/contents/one?ref=main';
   
+  // 🧠 Кэш
   const frameCache = new Map();
   let totalFrames = 0;
   let framesReady = false;
   let webpFiles = [];
   
-  // 🚀 GitHub API + preload (без изменений)
+  // 🚀 GitHub API
   const getFileListFromAPI = async () => {
     try {
       const response = await fetch(API_URL);
@@ -24,6 +25,7 @@
     }
   };
   
+  // 🚀 Предзагрузка
   const preloadAllFrames = async () => {
     if (framesReady) return;
     if (!await getFileListFromAPI()) return;
@@ -32,6 +34,7 @@
     const promises = webpFiles.map(async (fileName, index) => {
       try {
         const response = await fetch(`${REPO_PATH}${fileName}`);
+        if (!response.ok) return;
         const blob = await response.blob();
         const img = new Image();
         img.src = URL.createObjectURL(blob);
@@ -52,14 +55,14 @@
   
   preloadAllFrames();
   
-  // ✅ СТИЛИ: Fullscreen canvas + плавный drag
+  // ✅ СТИЛИ: Fullscreen + фиксированная высота
   const style = document.createElement('style');
   style.textContent = `
     .video360-container {
       position: relative !important;
-      width: 100% !important; 
-      height: 100% !important;
-      background: white;
+      width: 100% !important;
+      height: 400px !important; /* ✅ ФИКС высоты */
+      background: #f0f0f0;
       overflow: hidden;
       cursor: grab;
       transform: translateZ(0);
@@ -68,8 +71,9 @@
     .video360-container.dragging .video-protect-overlay { cursor: grabbing !important; }
     #vid360-canvas {
       position: absolute !important;
-      top: 0 !important; left: 0 !important;
-      width: 100% !important; 
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
       height: 100% !important;
       object-fit: cover;
       display: block !important;
@@ -80,7 +84,7 @@
   `;
   document.head.appendChild(style);
   
-  // 🔥 ОСНОВНОЙ ЦИКЛ TILDA
+  // 🔥 TILDA ЦИКЛ
   setInterval(() => {
     if (!framesReady) return;
     
@@ -99,7 +103,7 @@
     console.log('⚡ Video360: заменяем слайд!');
     prevLastSlide.classList.add('video-replaced');
     
-    // ✅ FULLSCREEN CANVAS HTML
+    // ✅ HTML: ФИКСИРОВАННАЯ высота 400px
     targetWrapper.innerHTML = `
       <div class="video360-container">
         <div class="video-protect-overlay"></div>
@@ -113,30 +117,36 @@
     const protectOverlay = container.querySelector('.video-protect-overlay');
     const sliderWrapper = document.querySelector('.t-slds__items-wrapper');
     
-    // ✅ Setup canvas ПОЛНОЭКРАННЫЙ
+    // ✅ SETUP CANVAS: ФИКС height=0
     const setupCanvas = () => {
       const rect = container.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       
-      // ✅ Canvas на ВЕСЬ контейнер
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      // ✅ ТОЧНЫЙ размер с минимальными ограничениями
+      const canvasWidth = Math.max(rect.width, 300);
+      const canvasHeight = Math.max(rect.height, 400); // ✅ Минимум 400px!
+      
+      canvas.width = canvasWidth * dpr;
+      canvas.height = canvasHeight * dpr;
       canvas.style.width = '100%';
       canvas.style.height = '100%';
       
       ctx.scale(dpr, dpr);
+      ctx.imageSmoothingEnabled = true;
+      
+      console.log(`📐 Canvas: ${canvasWidth.toFixed(0)}x${canvasHeight.toFixed(0)} DPR:${dpr}`);
     };
     
     setupCanvas();
     window.addEventListener('resize', setupCanvas);
     
-    // 🎮 ✅ ПЛАВНЫЙ DRAG (без рывков!)
+    // 🎮 ПЛАВНЫЙ DRAG (накопительный)
     let isDragging = false;
-    let dragStartFrame = 0;  // ✅ Текущий кадр при старте
-    let dragAccumulatedDelta = 0;  // ✅ НАКОПИТЕЛЬНОЕ смещение
+    let startX = 0;
+    let dragStartFrame = 0;
+    let dragAccumulatedDelta = 0;
     let rafId = null;
-    
-    const pixelsPerFrame = 4;  // ✅ Регулируйте скорость
+    const pixelsPerFrame = 4;
     
     const displayFrame = (frameIndex) => {
       const normalized = Math.floor(((frameIndex % totalFrames) + totalFrames) % totalFrames);
@@ -149,8 +159,7 @@
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       
       if (frameImg && frameImg.complete) {
-        // ✅ РАСТЯГИВАЕМ на весь canvas
-        ctx.drawImage(frameImg, 0, 0, canvasWidth, canvasHeight);
+        ctx.drawImage(frameImg, 0, 0, canvasWidth, canvasHeight); // ✅ Fullscreen растягивание
       } else {
         ctx.fillStyle = '#f0f0f0';
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -162,7 +171,6 @@
       if (isDragging) rafId = requestAnimationFrame(updateFrame);
     };
     
-    // ✅ ПЛАВНЫЙ START (запоминаем кадр)
     const handleMouseDown = (e) => {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -170,8 +178,9 @@
       if (rafId) cancelAnimationFrame(rafId);
       
       isDragging = true;
+      startX = e.clientX || (e.touches?.[0]?.clientX || 0);
       dragAccumulatedDelta = 0;
-      dragStartFrame = Math.floor(dragAccumulatedDelta); // Текущая позиция
+      dragStartFrame = 0;
       
       sliderWrapper.style.pointerEvents = 'none';
       container.classList.add('dragging');
@@ -179,19 +188,18 @@
       rafId = requestAnimationFrame(updateFrame);
     };
     
-    // ✅ ПЛАВНЫЙ MOVE (накопительное!)
     const handleMouseMove = (e) => {
       if (!isDragging) return;
       e.preventDefault();
       
       const currentX = e.clientX || (e.touches?.[0]?.clientX || 0);
       const deltaX = currentX - startX;
-      dragAccumulatedDelta = deltaX / pixelsPerFrame; // ✅ НАКОПИТЕЛЬНО!
+      dragAccumulatedDelta = deltaX / pixelsPerFrame; // ✅ НАКОПИТЕЛЬНО
       
       if (!rafId) rafId = requestAnimationFrame(updateFrame);
     };
     
-    const handleMouseUp = (e) => {
+    const handleMouseUp = () => {
       if (isDragging) {
         isDragging = false;
         container.classList.remove('dragging');
@@ -202,35 +210,34 @@
           rafId = null;
         }
         
-        // ✅ ФИНАЛЬНАЯ позиция
+        // ✅ ФИНАЛЬНАЯ позиция сохраняется
         dragStartFrame += dragAccumulatedDelta;
         dragAccumulatedDelta = 0;
         displayFrame(dragStartFrame);
       }
     };
     
-    // ✅ ГЛОБАЛЬНЫЕ переменные для drag
-    let startX = 0;
-    
-    protectOverlay.addEventListener('mousedown', (e) => {
-      startX = e.clientX;
-      handleMouseDown(e);
-    });
-    
+    // ✅ Events
+    protectOverlay.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
     
     protectOverlay.addEventListener('touchstart', (e) => {
-      startX = e.touches[0].clientX;
-      handleMouseDown({ clientX: startX });
+      handleMouseDown({ clientX: e.touches[0].clientX });
       e.preventDefault();
     }, { passive: false });
     
-    document.addEventListener('touchmove', handleMouseMove, { passive: false });
+    document.addEventListener('touchmove', (e) => {
+      if (isDragging) {
+        handleMouseMove({ clientX: e.touches[0].clientX });
+        e.preventDefault();
+      }
+    }, { passive: false });
+    
     document.addEventListener('touchend', handleMouseUp);
     
     // ✅ ПЕРВЫЙ КАДР
     displayFrame(0);
-    console.log('🚀 Video360: плавный drag + fullscreen готов!');
+    console.log('🚀 Video360: ✅ height fixed + плавный drag готов!');
   }, 500);
 })();
