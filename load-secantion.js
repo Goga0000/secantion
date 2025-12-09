@@ -4,7 +4,7 @@
   let totalFrames = 0;
   let preloadReady = false;
   let urls = [];
-  let angle = 0;
+  let angle = 0; // виртуальный "угол", по которому выбирается кадр
 
   // ФЛАГИ / СОСТОЯНИЕ
   let sliderRoot = null;
@@ -14,6 +14,9 @@
   let autoAnimId = null;         // requestAnimationFrame id автоанимации
   let isUserInteracting = false; // любое ручное взаимодействие отключает автоанимацию
   let holdIntervalId = null;     // setInterval для удержания кнопок
+
+  let canvas = null;
+  let ctx = null;
 
   // ЗАГРУЗКА СПИСКА ФАЙЛОВ
   const loadList = async () => {
@@ -104,25 +107,156 @@
     }
   })();
 
-  // MUTATION OBSERVER ДЛЯ АКТИВНОГО СЛАЙДА
+  // УТИЛИТЫ ОТРИСОВКИ
+  const setupCanvas = () => {
+    if (!canvas || !ctx) return;
+    canvas.width = 1024;
+    canvas.height = 1024;
+    ctx.resetTransform();
+  };
+
+  const renderImage = img => {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 1024, 1024);
+
+    let ratio = img.naturalWidth / img.naturalHeight;
+    let drawW, drawH, offsetX = 0, offsetY = 0;
+
+    if (ratio > 1) {
+      drawH = 1024;
+      drawW = 1024 * ratio;
+      offsetX = -((drawW - 1024) / 2);
+    } else {
+      drawW = 1024;
+      drawH = 1024 / ratio;
+      offsetY = -((drawH - 1024) / 2);
+    }
+
+    ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+  };
+
+  const drawFrame = frameAngle => {
+    if (!ctx || totalFrames === 0) return;
+
+    let index = Math.floor((frameAngle + totalFrames) % totalFrames);
+    let frame = framesMap.get(index);
+
+    if (frame) {
+      renderImage(frame);
+      return;
+    }
+
+    // поиск ближайшего загруженного
+    for (let r = 1; r <= 10; r++) {
+      let left = (index - r + totalFrames) % totalFrames;
+      let right = (index + r) % totalFrames;
+      frame = framesMap.get(left) || framesMap.get(right);
+      if (frame) {
+        renderImage(frame);
+        return;
+      }
+    }
+
+    // фоллбек на любой кадр
+    for (let any of framesMap.values()) {
+      renderImage(any);
+      return;
+    }
+
+    ctx.clearRect(0, 0, 1024, 1024);
+    ctx.fillStyle = "#f0f0f0";
+    ctx.fillRect(0, 0, 1024, 1024);
+  };
+
+  // ПОМЕТИТЬ РУЧНОЕ ВЗАИМОДЕЙСТВИЕ
+  const markUserInteraction = () => {
+    isUserInteracting = true;
+    if (autoAnimId !== null) {
+      cancelAnimationFrame(autoAnimId);
+      autoAnimId = null;
+    }
+    if (holdIntervalId !== null) {
+      clearInterval(holdIntervalId);
+      holdIntervalId = null;
+    }
+  };
+
+  // АВТОАНИМАЦИЯ 0 → 20% → 0
+  const startAutoAnimation = () => {
+    if (isUserInteracting || autoAnimId !== null || !totalFrames || !ctx) return;
+
+    const delta = totalFrames * 0.2; // 20%
+    const startAngle = angle;
+    const forwardAngle = startAngle + delta;
+    const duration = 1500; // мс туда и столько же обратно
+
+    let phase = "forward";
+    let startTime = null;
+
+    const step = ts => {
+      if (isUserInteracting) {
+        autoAnimId = null;
+        return;
+      }
+
+      if (!startTime) startTime = ts;
+      const elapsed = ts - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      if (phase === "forward") {
+        const current = startAngle + delta * progress;
+        angle = current;
+        drawFrame(angle);
+
+        if (progress < 1) {
+          autoAnimId = requestAnimationFrame(step);
+        } else {
+          phase = "backward";
+          startTime = null;
+          autoAnimId = requestAnimationFrame(step);
+        }
+      } else {
+        const current = forwardAngle - delta * progress;
+        angle = current;
+        drawFrame(angle);
+
+        if (progress < 1) {
+          autoAnimId = requestAnimationFrame(step);
+        } else {
+          angle = startAngle;
+          drawFrame(angle);
+          autoAnimId = null;
+        }
+      }
+    };
+
+    autoAnimId = requestAnimationFrame(step);
+  };
+
+  // MUTATION OBSERVER: СЛЕДИМ ЗА ПОЛУЧЕНИЕМ КЛАССА t-slds__item_active
   let observer = new MutationObserver(mutations => {
     mutations.forEach(mutation => {
       if (mutation.type === "attributes" && mutation.attributeName === "class") {
         let slide = mutation.target;
 
-        if (slide.classList.contains("video-replaced") && slide.classList.contains("t-slds__item_active")) {
-          console.log("🎯 Video360 АКТИВЕН! block → .t-slds__main");
+        // только для наших слайдов
+        if (!slide.classList.contains("video-replaced")) return;
+
+        if (slide.classList.contains("t-slds__item_active")) {
+          console.log("🎯 Video360 АКТИВЕН! block → .t-slds__main + АВТОАНИМАЦИЯ");
+
           let main = slide.closest(".t-slds__items-wrapper")?.closest(".t-slds")?.querySelector(".t-slds__main")
             || slide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main")
             || slide.closest(".t-slds__main");
+
           if (main) {
             main.classList.add("block");
             console.log("✅ block ДОБАВЛЕН к .t-slds__main");
           }
-        } else if (
-          slide.classList.contains("video-replaced") &&
-          !slide.classList.contains("t-slds__item_active")
-        ) {
+
+          // запуск автоанимации ТОЛЬКО при активации
+          startAutoAnimation();
+        } else {
           console.log("🔄 Video360 НЕАКТИВЕН!");
           let activeVideoSlide = document.querySelector(".video-replaced.t-slds__item_active");
           let main = slide.closest(".t-slds__items-wrapper")?.closest(".t-slds")?.querySelector(".t-slds__main")
@@ -142,19 +276,6 @@
     document.querySelectorAll(".video-replaced").forEach(el => {
       observer.observe(el, { attributes: true, attributeFilter: ["class"] });
     });
-  };
-
-  // ПОМЕТИТЬ РУЧНОЕ ВЗАИМОДЕЙСТВИЕ
-  const markUserInteraction = () => {
-    isUserInteracting = true;
-    if (autoAnimId !== null) {
-      cancelAnimationFrame(autoAnimId);
-      autoAnimId = null;
-    }
-    if (holdIntervalId !== null) {
-      clearInterval(holdIntervalId);
-      holdIntervalId = null;
-    }
   };
 
   // ГЛАВНЫЙ ИНТЕРВАЛ ПОИСКА СЛАЙДА И ИНИТ CANVAS
@@ -237,126 +358,16 @@
 
     attachObserver();
 
-    let canvas = document.getElementById("vid360-canvas");
-    let ctx = canvas.getContext("2d");
-    let controls = nullWrapper.querySelector(".video360-controls");
-    let btnPrev = nullWrapper.querySelector(".video360-prev");
-    let btnNext = nullWrapper.querySelector(".video360-next");
-
-    const setupCanvas = () => {
-      canvas.width = 1024;
-      canvas.height = 1024;
-      ctx.resetTransform();
-    };
-
-    const drawFrame = frameAngle => {
-      let index = Math.floor((frameAngle + totalFrames) % totalFrames);
-      let frame = framesMap.get(index);
-
-      if (frame) {
-        renderImage(frame);
-        return;
-      }
-
-      // поиск ближайшего загруженного
-      for (let r = 1; r <= 10; r++) {
-        let left = (index - r + totalFrames) % totalFrames;
-        let right = (index + r) % totalFrames;
-        frame = framesMap.get(left) || framesMap.get(right);
-        if (frame) {
-          renderImage(frame);
-          return;
-        }
-      }
-
-      // фоллбек
-      for (let any of framesMap.values()) {
-        renderImage(any);
-        return;
-      }
-
-      ctx.clearRect(0, 0, 1024, 1024);
-      ctx.fillStyle = "#f0f0f0";
-      ctx.fillRect(0, 0, 1024, 1024);
-    };
-
-    const renderImage = img => {
-      ctx.clearRect(0, 0, 1024, 1024);
-      let ratio = img.naturalWidth / img.naturalHeight;
-      let drawW, drawH, offsetX = 0, offsetY = 0;
-
-      if (ratio > 1) {
-        drawH = 1024;
-        drawW = 1024 * ratio;
-        offsetX = -((drawW - 1024) / 2);
-      } else {
-        drawW = 1024;
-        drawH = 1024 / ratio;
-        offsetY = -((drawH - 1024) / 2);
-      }
-
-      ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
-    };
+    canvas = document.getElementById("vid360-canvas");
+    ctx = canvas.getContext("2d");
 
     setupCanvas();
     drawFrame(angle);
 
-    // --- АВТОАНИМАЦИЯ 0 → 20% → 0 (один раз), можно прервать ---
-    const startAutoAnimation = () => {
-      if (isUserInteracting || autoAnimId !== null || !totalFrames) return;
+    let btnPrev = nullWrapper.querySelector(".video360-prev");
+    let btnNext = nullWrapper.querySelector(".video360-next");
 
-      const delta = totalFrames * 0.2; // 20%
-      const startAngle = angle;
-      const forwardAngle = startAngle + delta;
-      const duration = 1500; // мс туда и столько же обратно
-
-      let phase = "forward";
-      let startTime = null;
-
-      const step = ts => {
-        if (isUserInteracting) {
-          autoAnimId = null;
-          return;
-        }
-
-        if (!startTime) startTime = ts;
-        const elapsed = ts - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-
-        if (phase === "forward") {
-          const current = startAngle + delta * progress;
-          angle = current;
-          drawFrame(angle);
-
-          if (progress < 1) {
-            autoAnimId = requestAnimationFrame(step);
-          } else {
-            phase = "backward";
-            startTime = null;
-            autoAnimId = requestAnimationFrame(step);
-          }
-        } else {
-          const current = forwardAngle - delta * progress;
-          angle = current;
-          drawFrame(angle);
-
-          if (progress < 1) {
-            autoAnimId = requestAnimationFrame(step);
-          } else {
-            angle = startAngle;
-            drawFrame(angle);
-            autoAnimId = null;
-          }
-        }
-      };
-
-      autoAnimId = requestAnimationFrame(step);
-    };
-
-    // запуск сразу после инициализации
-    startAutoAnimation();
-
-    // --- ДРАГ ПО .t-slds ---
+    // --- ДРАГ ПО .t-slds (крутит ТОЛЬКО canvas) ---
     if (sliderRoot && !sliderRoot.video360DragSetup) {
       sliderRoot.video360DragSetup = true;
 
@@ -392,10 +403,10 @@
       console.log("🌐 ✅ Драг по .t-slds АКТИВЕН! block на .t-slds__main");
     }
 
-    // --- УДЕРЖАНИЕ КНОПОК ВПЕРЁД / НАЗАД ---
+    // --- УДЕРЖАНИЕ КНОПОК ВПЕРЁД / НАЗАД (крутят ТОТ ЖЕ angle, что и драг) ---
     const startHold = direction => {
       markUserInteraction();
-      const delta = direction === "next" ? 1 : -1;
+      const delta = direction === "next" ? 1 : -1; // шаг в кадрах
 
       if (holdIntervalId !== null) clearInterval(holdIntervalId);
       holdIntervalId = setInterval(() => {
@@ -431,6 +442,6 @@
       addHoldListeners(btnNext, "next");
     }
 
-    console.log("🚀 ✅ Video360 готов с автоанимацией и кнопками!");
+    console.log("🚀 ✅ Video360 готов с автоанимацией и кнопками (крутят canvas)!");
   }, 500);
 })();
