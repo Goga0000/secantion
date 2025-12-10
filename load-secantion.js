@@ -11,10 +11,13 @@
   let isDragging = false;
   let dragStartX = 0;
 
-  let autoAnimId = null;         // requestAnimationFrame id автоанимации
-  let autoAnimTimeoutId = null;  // setTimeout для отложенного старта автоанимации
-  let isUserInteracting = false; // любое ручное взаимодействие отключает автоанимацию
-  let holdIntervalId = null;     // setInterval для удержания кнопок
+  let autoAnimId = null;          // requestAnimationFrame id автоанимации
+  let autoAnimTimeoutId = null;   // setTimeout для отложенного старта автоанимации
+  let isUserInteracting = false;  // любое ручное взаимодействие отключает автоанимацию
+  let holdIntervalId = null;      // setInterval для удержания кнопок
+
+  let activeVideoSlide = null;    // текущий активный .video-replaced
+  let activeSlideCheckTimer = null; // интервал трекинга активного слайда
 
   let canvas = null;
   let ctx = null;
@@ -264,100 +267,6 @@
     autoAnimId = requestAnimationFrame(step);
   };
 
-  // MUTATION OBSERVER: СЛЕДИМ ЗА ПОЛУЧЕНИЕМ КЛАССА t-slds__item_active
-  let observer = new MutationObserver(mutations => {
-    mutations.forEach(mutation => {
-      if (mutation.type === "attributes" && mutation.attributeName === "class") {
-        let slide = mutation.target;
-
-        // только для наших слайдов
-        if (!slide.classList.contains("video-replaced")) return;
-
-        if (slide.classList.contains("t-slds__item_active")) {
-          console.log(
-            "🎯 Video360 АКТИВЕН! slide=",
-            slide,
-            " classes=",
-            slide.className
-          );
-
-          let main =
-            slide
-              .closest(".t-slds__items-wrapper")
-              ?.closest(".t-slds")
-              ?.querySelector(".t-slds__main") ||
-            slide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main") ||
-            slide.closest(".t-slds__main");
-
-          if (main) {
-            main.classList.add("block");
-            console.log("✅ block ДОБАВЛЕН к .t-slds__main");
-          }
-
-          // если уже был таймер — сбиваем
-          if (autoAnimTimeoutId !== null) {
-            clearTimeout(autoAnimTimeoutId);
-          }
-
-          // запуск автоанимации ЧЕРЕЗ 2 секунды, если за это время пользователь не потрогал
-          autoAnimTimeoutId = setTimeout(() => {
-            console.log(
-              "⏱ 2 секунды прошли, проверка перед автоанимацией: isUserInteracting=",
-              isUserInteracting
-            );
-            if (!isUserInteracting) {
-              startAutoAnimation();
-            } else {
-              console.log("🚫 Автоанимация не запущена: пользователь уже взаимодействует");
-            }
-            autoAnimTimeoutId = null;
-          }, 2000);
-        } else {
-          console.log("🔄 Video360 НЕАКТИВЕН!");
-          let activeVideoSlide = document.querySelector(
-            ".video-replaced.t-slds__item_active"
-          );
-          let main =
-            slide
-              .closest(".t-slds__items-wrapper")
-              ?.closest(".t-slds")
-              ?.querySelector(".t-slds__main") ||
-            slide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main") ||
-            slide.closest(".t-slds__main");
-
-          if (main && !activeVideoSlide) {
-            main.classList.remove("block");
-            console.log("✅ block УДАЛЕН с .t-slds__main");
-
-            // сбрасываем флаг взаимодействия при полном уходе со слайда
-            if (isUserInteracting) {
-              console.log("🔁 Сброс isUserInteracting при деактивации слайда");
-              isUserInteracting = false;
-            }
-          }
-
-          // при потере активности сбиваем и таймер, и текущую автоанимацию
-          if (autoAnimTimeoutId !== null) {
-            clearTimeout(autoAnimTimeoutId);
-            autoAnimTimeoutId = null;
-            console.log("🧹 Таймер автоанимации очищен при деактивации слайда");
-          }
-          if (autoAnimId !== null) {
-            cancelAnimationFrame(autoAnimId);
-            autoAnimId = null;
-            console.log("🧹 Автоанимация остановлена при деактивации слайда");
-          }
-        }
-      }
-    });
-  });
-
-  const attachObserver = () => {
-    document.querySelectorAll(".video-replaced").forEach(el => {
-      observer.observe(el, { attributes: true, attributeFilter: ["class"] });
-    });
-  };
-
   // ГЛАВНЫЙ ИНТЕРВАЛ ПОИСКА СЛАЙДА И ИНИТ CANVAS
   setInterval(() => {
     if (!preloadReady || framesMap.size === 0) return;
@@ -397,8 +306,6 @@
         </div>
       </div>
     `;
-
-    attachObserver();
 
     canvas = document.getElementById("vid360-canvas");
     ctx = canvas.getContext("2d");
@@ -525,4 +432,98 @@
 
     console.log("🚀 ✅ Video360 готов с автоанимацией и кнопками (крутят canvas)!");
   }, 500);
+
+  // ТРЕКЕР АКТИВНОГО СЛАЙДА: каждые 300мс проверяем, активен ли наш .video-replaced
+  activeSlideCheckTimer = setInterval(() => {
+    if (!preloadReady || framesMap.size === 0) return;
+
+    const itemsWrapper = document.querySelector(".t-slds__items-wrapper");
+    if (!itemsWrapper) return;
+
+    const active = itemsWrapper.querySelector(".t-slds__item.t-slds__item_active");
+    const videoSlide = itemsWrapper.querySelector(".t-slds__item.video-replaced");
+
+    // если наш video-слайд вообще ещё не встроен — выходим
+    if (!videoSlide) return;
+
+    // CASE 1: наш video-слайд только что стал активным
+    if (active === videoSlide && activeVideoSlide !== videoSlide) {
+      activeVideoSlide = videoSlide;
+      console.log("🎯 Video360: наш слайд стал АКТИВНЫМ (tracker)");
+
+      const main =
+        videoSlide
+          .closest(".t-slds__items-wrapper")
+          ?.closest(".t-slds")
+          ?.querySelector(".t-slds__main") ||
+        videoSlide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main") ||
+        videoSlide.closest(".t-slds__main");
+
+      if (main) {
+        main.classList.add("block");
+        console.log("✅ block ДОБАВЛЕН к .t-slds__main (tracker)");
+      }
+
+      // гасим возможные старые таймеры/анимации
+      if (autoAnimTimeoutId !== null) {
+        clearTimeout(autoAnimTimeoutId);
+        autoAnimTimeoutId = null;
+      }
+      if (autoAnimId !== null) {
+        cancelAnimationFrame(autoAnimId);
+        autoAnimId = null;
+      }
+
+      // сброс флага взаимодействия при новом заходе на слайд
+      isUserInteracting = false;
+      console.log("🔁 isUserInteracting сброшен при активации слайда");
+
+      // Отложенный запуск автоанимации через 2 секунды
+      autoAnimTimeoutId = setTimeout(() => {
+        console.log(
+          "⏱ 2 секунды прошли (tracker), isUserInteracting=",
+          isUserInteracting
+        );
+        if (!isUserInteracting) {
+          startAutoAnimation();
+        } else {
+          console.log(
+            "🚫 Автоанимация не запущена: пользователь уже взаимодействует (tracker)"
+          );
+        }
+        autoAnimTimeoutId = null;
+      }, 2000);
+    }
+
+    // CASE 2: наш video-слайд перестал быть активным
+    if (activeVideoSlide && active !== activeVideoSlide) {
+      console.log("🔄 Video360: наш слайд стал НЕАКТИВНЫМ (tracker)");
+
+      const main =
+        activeVideoSlide
+          .closest(".t-slds__items-wrapper")
+          ?.closest(".t-slds")
+          ?.querySelector(".t-slds__main") ||
+        activeVideoSlide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main") ||
+        activeVideoSlide.closest(".t-slds__main");
+
+      if (main) {
+        main.classList.remove("block");
+        console.log("✅ block УДАЛЕН с .t-slds__main (tracker)");
+      }
+
+      if (autoAnimTimeoutId !== null) {
+        clearTimeout(autoAnimTimeoutId);
+        autoAnimTimeoutId = null;
+        console.log("🧹 Таймер автоанимации очищен при деактивации (tracker)");
+      }
+      if (autoAnimId !== null) {
+        cancelAnimationFrame(autoAnimId);
+        autoAnimId = null;
+        console.log("🧹 Автоанимация остановлена при деактивации (tracker)");
+      }
+
+      activeVideoSlide = null;
+    }
+  }, 300);
 })();
