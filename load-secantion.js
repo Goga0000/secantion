@@ -115,7 +115,7 @@
     if (!canvas || !ctx) return;
     canvas.width = 1024;
     canvas.height = 1024;
-    ctx.resetTransform();
+    if (ctx.resetTransform) ctx.resetTransform();
   };
 
   const renderImage = img => {
@@ -274,7 +274,12 @@
         if (!slide.classList.contains("video-replaced")) return;
 
         if (slide.classList.contains("t-slds__item_active")) {
-          console.log("🎯 Video360 АКТИВЕН! block → .t-slds__main + отложенная автоанимация");
+          console.log(
+            "🎯 Video360 АКТИВЕН! slide=",
+            slide,
+            " classes=",
+            slide.className
+          );
 
           let main =
             slide
@@ -323,6 +328,12 @@
           if (main && !activeVideoSlide) {
             main.classList.remove("block");
             console.log("✅ block УДАЛЕН с .t-slds__main");
+
+            // сбрасываем флаг взаимодействия при полном уходе со слайда
+            if (isUserInteracting) {
+              console.log("🔁 Сброс isUserInteracting при деактивации слайда");
+              isUserInteracting = false;
+            }
           }
 
           // при потере активности сбиваем и таймер, и текущую автоанимацию
@@ -475,9 +486,17 @@
       const addHoldListeners = (btn, direction) => {
         const onDown = e => {
           e.preventDefault();
+          e.stopPropagation(); // блокируем всплытие до слайда
           console.log("👆 Кнопка", direction, "mousedown/touchstart, type=", e.type);
           startHold(direction);
         };
+
+        const onClick = e => {
+          e.preventDefault();
+          e.stopPropagation(); // глушим click, чтобы Tilda не листала слайд
+          console.log("🚫 click по кнопке", direction, "заглушен, angle=", angle);
+        };
+
         const onUp = e => {
           console.log(
             "✋ Кнопка",
@@ -486,10 +505,12 @@
             e.type
           );
           stopHold(e.type);
+          e.stopPropagation(); // не даём mouseup/touchend долететь до слайда
         };
 
         btn.addEventListener("mousedown", onDown);
         btn.addEventListener("touchstart", onDown, { passive: false });
+        btn.addEventListener("click", onClick);
 
         document.addEventListener("mouseup", onUp);
         document.addEventListener("touchend", onUp);
