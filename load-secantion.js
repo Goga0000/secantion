@@ -12,6 +12,7 @@
   let dragStartX = 0;
 
   let autoAnimId = null;         // requestAnimationFrame id автоанимации
+  let autoAnimTimeoutId = null;  // setTimeout для отложенного старта автоанимации
   let isUserInteracting = false; // любое ручное взаимодействие отключает автоанимацию
   let holdIntervalId = null;     // setInterval для удержания кнопок
 
@@ -21,7 +22,9 @@
   // ЗАГРУЗКА СПИСКА ФАЙЛОВ
   const loadList = async () => {
     try {
-      const res = await fetch("https://api.github.com/repos/Goga0000/secantion/contents/one?ref=main");
+      const res = await fetch(
+        "https://api.github.com/repos/Goga0000/secantion/contents/one?ref=main"
+      );
       const json = await res.json();
       urls = json.map(item => item.download_url);
       totalFrames = urls.length;
@@ -170,12 +173,23 @@
 
   // ПОМЕТИТЬ РУЧНОЕ ВЗАИМОДЕЙСТВИЕ
   const markUserInteraction = () => {
+    if (!isUserInteracting) {
+      console.log("🙋 Пользовательское взаимодействие зафиксировано");
+    }
     isUserInteracting = true;
+
     if (autoAnimId !== null) {
+      console.log("🧹 Остановка автоанимации из markUserInteraction");
       cancelAnimationFrame(autoAnimId);
       autoAnimId = null;
     }
+    if (autoAnimTimeoutId !== null) {
+      console.log("🧹 Очистка таймера автоанимации из markUserInteraction");
+      clearTimeout(autoAnimTimeoutId);
+      autoAnimTimeoutId = null;
+    }
     if (holdIntervalId !== null) {
+      console.log("🧹 Очистка holdInterval из markUserInteraction");
       clearInterval(holdIntervalId);
       holdIntervalId = null;
     }
@@ -183,7 +197,22 @@
 
   // АВТОАНИМАЦИЯ 0 → 20% → 0
   const startAutoAnimation = () => {
-    if (isUserInteracting || autoAnimId !== null || !totalFrames || !ctx) return;
+    if (isUserInteracting || autoAnimId !== null || !totalFrames || !ctx) {
+      console.log(
+        "⏭ Автоанимация не запущена:",
+        "isUserInteracting=",
+        isUserInteracting,
+        " autoAnimId=",
+        autoAnimId,
+        " totalFrames=",
+        totalFrames,
+        " ctx=",
+        !!ctx
+      );
+      return;
+    }
+
+    console.log("▶ Старт автоанимации с угла", angle);
 
     const delta = totalFrames * 0.2; // 20%
     const startAngle = angle;
@@ -195,6 +224,7 @@
 
     const step = ts => {
       if (isUserInteracting) {
+        console.log("⛔ Автоанимация остановлена из‑за взаимодействия пользователя");
         autoAnimId = null;
         return;
       }
@@ -225,6 +255,7 @@
         } else {
           angle = startAngle;
           drawFrame(angle);
+          console.log("⏹ Автоанимация завершена, угол восстановлен", angle);
           autoAnimId = null;
         }
       }
@@ -243,29 +274,67 @@
         if (!slide.classList.contains("video-replaced")) return;
 
         if (slide.classList.contains("t-slds__item_active")) {
-          console.log("🎯 Video360 АКТИВЕН! block → .t-slds__main + АВТОАНИМАЦИЯ");
+          console.log("🎯 Video360 АКТИВЕН! block → .t-slds__main + отложенная автоанимация");
 
-          let main = slide.closest(".t-slds__items-wrapper")?.closest(".t-slds")?.querySelector(".t-slds__main")
-            || slide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main")
-            || slide.closest(".t-slds__main");
+          let main =
+            slide
+              .closest(".t-slds__items-wrapper")
+              ?.closest(".t-slds")
+              ?.querySelector(".t-slds__main") ||
+            slide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main") ||
+            slide.closest(".t-slds__main");
 
           if (main) {
             main.classList.add("block");
             console.log("✅ block ДОБАВЛЕН к .t-slds__main");
           }
 
-          // запуск автоанимации ТОЛЬКО при активации
-          startAutoAnimation();
+          // если уже был таймер — сбиваем
+          if (autoAnimTimeoutId !== null) {
+            clearTimeout(autoAnimTimeoutId);
+          }
+
+          // запуск автоанимации ЧЕРЕЗ 2 секунды, если за это время пользователь не потрогал
+          autoAnimTimeoutId = setTimeout(() => {
+            console.log(
+              "⏱ 2 секунды прошли, проверка перед автоанимацией: isUserInteracting=",
+              isUserInteracting
+            );
+            if (!isUserInteracting) {
+              startAutoAnimation();
+            } else {
+              console.log("🚫 Автоанимация не запущена: пользователь уже взаимодействует");
+            }
+            autoAnimTimeoutId = null;
+          }, 2000);
         } else {
           console.log("🔄 Video360 НЕАКТИВЕН!");
-          let activeVideoSlide = document.querySelector(".video-replaced.t-slds__item_active");
-          let main = slide.closest(".t-slds__items-wrapper")?.closest(".t-slds")?.querySelector(".t-slds__main")
-            || slide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main")
-            || slide.closest(".t-slds__main");
+          let activeVideoSlide = document.querySelector(
+            ".video-replaced.t-slds__item_active"
+          );
+          let main =
+            slide
+              .closest(".t-slds__items-wrapper")
+              ?.closest(".t-slds")
+              ?.querySelector(".t-slds__main") ||
+            slide.closest(".t-slds__wrapper")?.querySelector(".t-slds__main") ||
+            slide.closest(".t-slds__main");
 
           if (main && !activeVideoSlide) {
             main.classList.remove("block");
             console.log("✅ block УДАЛЕН с .t-slds__main");
+          }
+
+          // при потере активности сбиваем и таймер, и текущую автоанимацию
+          if (autoAnimTimeoutId !== null) {
+            clearTimeout(autoAnimTimeoutId);
+            autoAnimTimeoutId = null;
+            console.log("🧹 Таймер автоанимации очищен при деактивации слайда");
+          }
+          if (autoAnimId !== null) {
+            cancelAnimationFrame(autoAnimId);
+            autoAnimId = null;
+            console.log("🧹 Автоанимация остановлена при деактивации слайда");
           }
         }
       }
@@ -305,52 +374,14 @@
     targetSlide.classList.add("video-replaced");
 
     nullWrapper.innerHTML = `
-      <div class="video360-container" style="position:relative;">
+      <div class="video360-container">
         <canvas id="vid360-canvas"></canvas>
-        <div class="video360-controls"
-             style="
-               position:absolute;
-               left:50%;
-               bottom:20px;
-               transform:translateX(-50%);
-               display:flex;
-               align-items:center;
-               justify-content:center;
-               gap:10px;
-             ">
-          <button class="video360-btn video360-prev"
-                  type="button"
-                  style="
-                    width:30px;
-                    height:30px;
-                    padding:0;
-                    border:none;
-                    background:transparent;
-                    cursor:pointer;
-                    display:flex;
-                    align-items:center;
-                    justify-content:center;
-                  ">
-            <img src="https://static.tildacdn.com/tild3961-3766-4131-a531-386233346139/left.svg"
-                 alt="Назад"
-                 style="width:100%;height:100%;object-fit:contain;" />
+        <div class="video360-controls">
+          <button class="video360-btn video360-prev" type="button">
+            <img src="https://static.tildacdn.com/tild3961-3766-4131-a531-386233346139/left.svg" alt="Назад" />
           </button>
-          <button class="video360-btn video360-next"
-                  type="button"
-                  style="
-                    width:30px;
-                    height:30px;
-                    padding:0;
-                    border:none;
-                    background:transparent;
-                    cursor:pointer;
-                    display:flex;
-                    align-items:center;
-                    justify-content:center;
-                  ">
-            <img src="https://static.tildacdn.com/tild3930-3062-4362-b730-663038363061/right.svg"
-                 alt="Вперёд"
-                 style="width:100%;height:100%;object-fit:contain;" />
+          <button class="video360-btn video360-next" type="button">
+            <img src="https://static.tildacdn.com/tild3930-3062-4362-b730-663038363061/right.svg" alt="Вперёд" />
           </button>
         </div>
       </div>
@@ -371,25 +402,31 @@
     if (sliderRoot && !sliderRoot.video360DragSetup) {
       sliderRoot.video360DragSetup = true;
 
+      const getClientX = e =>
+        e.clientX !== undefined ? e.clientX : e.touches?.[0]?.clientX || 0;
+
       const onDown = e => {
         isDragging = true;
-        dragStartX = e.clientX || e.touches?.[0]?.clientX || 0;
+        dragStartX = getClientX(e);
         markUserInteraction();
-        console.log("👆 Драг по .t-slds");
+        console.log("👆 Драг по .t-slds start, x=", dragStartX, " angle=", angle);
       };
 
       const onMove = e => {
         if (!isDragging) return;
-        const x = e.clientX || e.touches?.[0]?.clientX || 0;
-        angle += (x - dragStartX) * 0.1;
+        const x = getClientX(e);
+        const dx = x - dragStartX;
+        angle += dx * 0.1;
         dragStartX = x;
         drawFrame(angle);
+        console.log("🔁 Драг по .t-slds move, dx=", dx, " angle=", angle);
         e.preventDefault();
       };
 
       const onUp = () => {
+        if (!isDragging) return;
         isDragging = false;
-        console.log("✋ Драг по .t-slds закончен");
+        console.log("✋ Драг по .t-slds end, final angle=", angle);
       };
 
       sliderRoot.addEventListener("mousedown", onDown, { passive: false });
@@ -403,32 +440,53 @@
       console.log("🌐 ✅ Драг по .t-slds АКТИВЕН! block на .t-slds__main");
     }
 
-    // --- УДЕРЖАНИЕ КНОПОК ВПЕРЁД / НАЗАД (крутят ТОТ ЖЕ angle, что и драг) ---
+    // --- УДЕРЖАНИЕ КНОПОК ВПЕРЁД / НАЗАД ---
     const startHold = direction => {
       markUserInteraction();
       const delta = direction === "next" ? 1 : -1; // шаг в кадрах
 
-      if (holdIntervalId !== null) clearInterval(holdIntervalId);
+      console.log("▶ startHold", direction, " delta=", delta, " angle start=", angle);
+
+      if (holdIntervalId !== null) {
+        clearInterval(holdIntervalId);
+        console.log("♻ Перезапуск holdInterval, старый очищен");
+      }
+
       holdIntervalId = setInterval(() => {
         angle += delta;
         drawFrame(angle);
+        console.log("🔁 hold step", direction, " angle=", angle);
       }, 16); // ~60fps
     };
 
-    const stopHold = () => {
+    const stopHold = (reason = "mouseup/touchend") => {
       if (holdIntervalId !== null) {
         clearInterval(holdIntervalId);
         holdIntervalId = null;
+        console.log("⏹ stopHold (reason:", reason, ") конечный angle=", angle);
+      } else {
+        console.log("⏹ stopHold вызван, но holdIntervalId уже null (reason:", reason, ")");
       }
     };
 
     if (btnPrev && btnNext) {
+      console.log("✅ Кнопки Video360 найдены, подключаем обработчики");
+
       const addHoldListeners = (btn, direction) => {
         const onDown = e => {
           e.preventDefault();
+          console.log("👆 Кнопка", direction, "mousedown/touchstart, type=", e.type);
           startHold(direction);
         };
-        const onUp = () => stopHold();
+        const onUp = e => {
+          console.log(
+            "✋ Кнопка",
+            direction,
+            "mouseup/touchend/touchcancel, type=",
+            e.type
+          );
+          stopHold(e.type);
+        };
 
         btn.addEventListener("mousedown", onDown);
         btn.addEventListener("touchstart", onDown, { passive: false });
@@ -440,6 +498,8 @@
 
       addHoldListeners(btnPrev, "prev");
       addHoldListeners(btnNext, "next");
+    } else {
+      console.warn("❌ Кнопки Video360 не найдены", { btnPrev, btnNext });
     }
 
     console.log("🚀 ✅ Video360 готов с автоанимацией и кнопками (крутят canvas)!");
