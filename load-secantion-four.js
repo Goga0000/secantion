@@ -2,12 +2,8 @@
 <div class="video360-container">
 <canvas id="vid360-canvas"></canvas>
 <div class="video360-controls">
-<button class="video360-btn video360-prev" type="button">
-<img src="https://static.tildacdn.com/tild3961-3766-4131-a531-386233346139/left.svg" alt="Назад" />
-</button>
-<button class="video360-btn video360-next" type="button">
-<img src="https://static.tildacdn.com/tild3930-3062-4362-b730-663038363061/right.svg" alt="Вперёд" />
-</button>
+<button class="video360-btn video360-prev" type="button" tabindex="0" style="background-image: url('https://static.tildacdn.com/tild3961-3766-4131-a531-386233346139/left.svg')"></button>
+<button class="video360-btn video360-next" type="button" tabindex="0" style="background-image: url('https://static.tildacdn.com/tild3930-3062-4362-b730-663038363061/right.svg')"></button>
 </div>
 </div>
 `,f=(_=document.getElementById("vid360-canvas")).getContext("2d"),y(),b(n);let $=u.querySelector(".video360-prev"),v=u.querySelector(".video360-next");if(r&&!r.video360DragSetup){r.video360DragSetup=!0;let p=e=>void 0!==e.clientX?e.clientX:e.touches?.[0]?.clientX||0,m=e=>{a=!0,i=p(e),L()},w=e=>{if(!a)return;let t=p(e);n+=.1*(t-i),i=t,b(n),e.preventDefault()},h=()=>{a&&(a=!1)};r.addEventListener("mousedown",m,{passive:!1}),r.addEventListener("mousemove",w,{passive:!1}),document.addEventListener("mouseup",h),r.addEventListener("touchstart",m,{passive:!1}),r.addEventListener("touchmove",w,{passive:!1}),document.addEventListener("touchend",h)}let g=e=>{L();let t="next"===e?1:-1;null!==c&&clearInterval(c),c=setInterval(()=>{b(n+=t)},16)},S=()=>{null!==c&&(clearInterval(c),c=null)};if($&&v){let q=(e,t)=>{let l=e=>{e.preventDefault(),e.stopPropagation(),g(t)},s=e=>{e.preventDefault(),e.stopPropagation()},n=e=>{S(),e.stopPropagation()};e.addEventListener("mousedown",l),e.addEventListener("touchstart",l,{passive:!1}),e.addEventListener("click",s),document.addEventListener("mouseup",n),document.addEventListener("touchend",n),document.addEventListener("touchcancel",n)};q($,"prev"),q(v,"next")}},500),v=setInterval(()=>{if(!l||0===e.size)return;let t=document.querySelector(".t-slds__items-wrapper");if(!t)return;let s=t.querySelector(".t-slds__item.t-slds__item_active"),n=t.querySelector(".t-slds__item.video-replaced");if(n){if(s===n&&$!==n){$=n;let r=n.closest(".t-slds__items-wrapper")?.closest(".t-slds")?.querySelector(".t-slds__main")||n.closest(".t-slds__wrapper")?.querySelector(".t-slds__main")||n.closest(".t-slds__main");r&&r.classList.add("block"),null!==d&&(clearTimeout(d),d=null),null!==o&&(cancelAnimationFrame(o),o=null),u=!1,d=setTimeout(()=>{u||S(),d=null},2e3)}if($&&s!==$){let a=$.closest(".t-slds__items-wrapper")?.closest(".t-slds")?.querySelector(".t-slds__main")||$.closest(".t-slds__wrapper")?.querySelector(".t-slds__main")||$.closest(".t-slds__main");a&&a.classList.remove("block"),null!==d&&(clearTimeout(d),d=null),null!==o&&(cancelAnimationFrame(o),o=null),$=null}}},300)})();
